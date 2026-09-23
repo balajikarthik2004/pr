@@ -8,11 +8,14 @@ permissions:
   contents: read
   pull-requests: read
 
-# A release PR (test -> main) is an aggregate of already-reviewed changes.
-# It is large by nature and references many tickets, so the size and
-# linked-issue gates are exempted for it. Everything else still applies.
+# A promotion PR (dev -> test, or test -> main) aggregates changes that were
+# already reviewed individually. It is large by nature and references many
+# tickets, so the size and linked-issue gates are waived for it. Every other
+# gate still applies.
 env:
-  IS_RELEASE_PR: ${{ github.base_ref == 'main' && github.head_ref == 'test' }}
+  IS_RELEASE_PR: >-
+    ${{ (github.base_ref == 'test' && github.head_ref == 'dev') ||
+    (github.base_ref == 'main' && github.head_ref == 'test') }}
 
 jobs:
   title:
@@ -82,7 +85,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$IS_RELEASE_PR" = "true" ]; then
-            echo "Release PR (test -> main): aggregates many tickets, gate skipped."
+            echo "Promotion PR: aggregates many tickets, gate skipped."
             exit 0
           fi
           if printf '%s %s' "$TITLE" "$BODY" | grep -Eq '(#[0-9]+|[A-Z][A-Z0-9]+-[0-9]+)'; then
@@ -129,7 +132,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$IS_RELEASE_PR" = "true" ]; then
-            echo "Release PR (test -> main): large by design, size limit skipped."
+            echo "Promotion PR: large by design, size limit skipped."
             exit 0
           fi
           CHANGED=$(git diff --numstat "$BASE_SHA" "$HEAD_SHA" -- . \

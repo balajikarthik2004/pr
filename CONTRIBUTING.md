@@ -4,18 +4,20 @@ These rules are enforced by CI. Nothing here relies on someone remembering it.
 
 ## Branching
 
-Two long-lived branches:
+Three long-lived branches:
 
-| Branch | What it is | How code gets in |
-|---|---|---|
-| `test` | Integration branch. QA works here. | PR from a feature branch, full gate, **squash merge** |
-| `main` | Production. | PR from `test` only, tester approval, **merge commit** |
+| Branch | What it is | How code gets in | Merge style |
+|---|---|---|---|
+| `dev` | Integration. Every change lands here first. | PR from a feature branch, full gate | **Squash** |
+| `test` | QA exercises this branch. | Promotion PR from `dev` | **Merge commit** |
+| `main` | Production. | Promotion PR from `test` | **Merge commit** |
 
-- Branch off `test`, not `main`. Name it `feat/…`, `fix/…`, `chore/…`.
-- Never push directly to either branch. Both are protected.
-- Rebase onto `test` before requesting review.
-- **Never squash-merge `test` into `main`.** Use "Create a merge commit". Squashing
-  makes the two branches diverge and every later release PR shows phantom conflicts.
+- Branch off `dev`. Name it `feat/…`, `fix/…`, `chore/…`.
+- Never push directly to `dev`, `test` or `main`. All three are protected.
+- Rebase onto `dev` before requesting review.
+- **Squash only into `dev`.** Promotions use "Create a merge commit". Squashing a
+  promotion makes the branches diverge and every later promotion PR shows
+  phantom conflicts.
 
 ## Pull request rules
 
@@ -51,27 +53,33 @@ file is the review policy, and it is worth editing when the reviewer is wrong.
 
 ## Review and merge
 
-### Stage 1 — your change into `test`
+### Stage 1 — your change into `dev`
 
-1. Open a PR from your feature branch into `test`. All eight checks and the AI
+1. Open a PR from your feature branch into `dev`. All eight checks and the AI
    reviewer start automatically.
 2. Fix what CI finds. Answer what the AI finds — unresolved threads block merge.
 3. A developer approves. Pushing new commits dismisses stale approvals.
 4. Click **Squash and merge**.
 
-### Stage 2 — `test` into `main`
+### Stage 2 — `dev` into `test`
 
-5. QA exercises the change on the `test` branch. If it fails, back to step 1.
-6. On sign-off, someone runs `gh workflow run promote.yml`. That opens the
-   release PR with generated notes — it does not merge anything.
-7. All checks re-run against the combined branch. Being individually green is
-   not the same as being green together.
-8. The **tester** approves.
-9. A human clicks **Create a merge commit**. Auto-merge is disabled repo-wide,
-   so nothing reaches `main` without that click.
+5. When the integrated changes are ready for QA, run
+   `gh workflow run promote.yml -f hop=dev-to-test`. It opens the promotion PR
+   with generated notes — it does not merge anything.
+6. Checks re-run against the integrated branch. Individually green is not the
+   same as green together.
+7. A reviewer approves; someone clicks **Create a merge commit**.
 
-The size and linked-issue gates are waived on the release PR — it aggregates
-many already-reviewed changes and references many tickets. Everything else
+### Stage 3 — `test` into `main`
+
+8. QA exercises the changes on `test`. If anything fails, back to step 1.
+9. On sign-off, run `gh workflow run promote.yml -f hop=test-to-main`.
+10. Checks re-run again. The **tester** approves.
+11. A human clicks **Create a merge commit**. Auto-merge is disabled repo-wide,
+    so nothing reaches `main` without that click.
+
+The size and linked-issue gates are waived on promotion PRs — they aggregate
+many already-reviewed changes and reference many tickets. Every other gate
 still applies.
 
 ## Running the checks locally

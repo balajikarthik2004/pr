@@ -13,8 +13,8 @@ set -euo pipefail
 S="${1:-}"
 [ -z "$S" ] && { echo "usage: $0 <bugs|lint|hygiene|huge|clean>" >&2; exit 2; }
 
-git checkout test -q 2>/dev/null || git checkout -qb test
-git pull -q --ff-only origin test 2>/dev/null || true
+git checkout dev -q 2>/dev/null || git checkout -qb dev
+git pull -q --ff-only origin dev 2>/dev/null || true
 BR="test/${S}-$(date +%s)"
 git checkout -qb "$BR"
 
@@ -156,6 +156,6 @@ MD
 )
 fi
 
-gh pr create --base test --head "$BR" --title "$TITLE" --body "$BODY"
+gh pr create --base dev --head "$BR" --title "$TITLE" --body "$BODY"
 echo
 echo "Scenario '$S' pushed. Watch it with:  gh pr checks --watch"

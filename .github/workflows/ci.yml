@@ -1,12 +1,13 @@
 name: CI
 
 on:
-  # Gate 1: feature/* -> test   (the real gate - every change passes here)
-  # Gate 2: test -> main        (re-runs on the combined branch before release)
+  # Gate 1: feature/* -> dev    (the real gate - every change passes here)
+  # Gate 2: dev -> test         (re-runs on the integrated branch)
+  # Gate 3: test -> main        (re-runs again before release)
   pull_request:
-    branches: [test, main]
+    branches: [dev, test, main]
   push:
-    branches: [test, main]
+    branches: [dev, test, main]
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}

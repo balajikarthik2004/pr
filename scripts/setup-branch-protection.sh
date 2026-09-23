@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Protect both branches in the feature -> test -> main flow.
+# Protect all three branches in the feature -> dev -> test -> main flow.
 #
-#   ./scripts/setup-branch-protection.sh <owner/repo> [sandbox|prod]
+#   ./scripts/setup-branch-protection.sh <owner/repo> [solo|team|prod]
 #
-# sandbox : 0 required approvals. You cannot approve your own PR on a personal
-#           repo, so 1 would deadlock every test PR. Everything else is real.
-# prod    : test needs 1 dev approval; main needs 1 tester approval with
-#           CODEOWNERS review and admin enforcement.
+# solo : 0 required approvals. Only for a single-account repo, where you
+#        cannot approve your own PR and 1 would deadlock every PR.
+# team : 1 approval on every hop. Use this when you have a second account
+#        added as a collaborator - it exercises the real approval gates.
+# prod : same as team, plus CODEOWNERS review and admin enforcement.
 #
 # Requires: gh auth login   (scope: repo)
 set -euo pipefail
@@ -16,9 +17,10 @@ MODE="${2:-sandbox}"
 [ -z "$REPO" ] && { echo "usage: $0 <owner/repo> [sandbox|prod]" >&2; exit 2; }
 
 case "$MODE" in
-  sandbox) TEST_APPROVALS=0; MAIN_APPROVALS=0; CODEOWNERS=false; ADMINS=false; LAST_PUSH=false ;;
-  prod)    TEST_APPROVALS=1; MAIN_APPROVALS=1; CODEOWNERS=true;  ADMINS=true;  LAST_PUSH=true  ;;
-  *) echo "mode must be 'sandbox' or 'prod'" >&2; exit 2 ;;
+  solo) APPROVALS=0; CODEOWNERS=false; ADMINS=false; LAST_PUSH=false ;;
+  team) APPROVALS=1; CODEOWNERS=false; ADMINS=false; LAST_PUSH=true  ;;
+  prod) APPROVALS=1; CODEOWNERS=true;  ADMINS=true;  LAST_PUSH=true  ;;
+  *) echo "mode must be 'solo', 'team' or 'prod'" >&2; exit 2 ;;
 esac
 
 # Job names from the workflows. The AI reviewer is deliberately absent:
@@ -50,32 +52,36 @@ protect() {
 JSON
 }
 
-# Create test from main if it does not exist yet.
-if ! gh api "repos/${REPO}/branches/test" >/dev/null 2>&1; then
-  echo "Creating 'test' branch from main..."
-  SHA=$(gh api "repos/${REPO}/git/ref/heads/main" --jq .object.sha)
-  gh api -X POST "repos/${REPO}/git/refs" -f ref=refs/heads/test -f sha="$SHA" >/dev/null
-fi
+# Create dev and test from main if they do not exist yet.
+MAIN_SHA=$(gh api "repos/${REPO}/git/ref/heads/main" --jq .object.sha)
+for b in dev test; do
+  if ! gh api "repos/${REPO}/branches/${b}" >/dev/null 2>&1; then
+    echo "Creating '${b}' from main..."
+    gh api -X POST "repos/${REPO}/git/refs"       -f ref="refs/heads/${b}" -f sha="$MAIN_SHA" >/dev/null
+  fi
+done
 
 echo "Applying '$MODE' protection to $REPO"
 
-# test: squash-only, so linear history is enforceable.
-if ! protect test "$TEST_APPROVALS" false true; then
-  echo "FAILED on 'test'. Common causes:" >&2
+# dev: entry point. Feature branches squash-merge in, so linear history holds.
+if ! protect dev "$APPROVALS" false true; then
+  echo "FAILED on 'dev'. Common causes:" >&2
   echo "  403 Upgrade : branch protection on a PRIVATE personal repo needs GitHub Pro." >&2
   echo "                Make the repo public, upgrade, or test protection in the org." >&2
   echo "  403 scope   : gh auth refresh -s repo" >&2
   exit 1
 fi
 
-# main: linear history MUST be false. The release PR merges with a merge
-# commit, and required_linear_history would reject it.
-protect main "$MAIN_APPROVALS" "$CODEOWNERS" false
+# test and main receive MERGE COMMITS from the promotion PRs, so
+# required_linear_history must be false or the merge is rejected.
+protect test "$APPROVALS" false false
+protect main "$APPROVALS" "$CODEOWNERS" false
 
 # Both merge styles enabled - you pick per PR:
-#   feature -> test : Squash and merge   (one tidy commit per change)
+#   feature -> dev  : Squash and merge      (one tidy commit per change)
+#   dev     -> test : Create a merge commit
 #   test    -> main : Create a merge commit
-# Squashing into main as well would make the branches permanently diverge.
+# Squashing a promotion would make the two branches permanently diverge.
 # Auto-merge stays off: the last step is always a human clicking merge.
 # delete_branch_on_merge does not touch 'test' - protected branches are exempt.
 gh api -X PATCH "repos/${REPO}" \
@@ -88,7 +94,7 @@ gh api -X PATCH "repos/${REPO}" \
   -F squash_merge_commit_message=PR_BODY >/dev/null
 
 echo
-for b in test main; do
+for b in dev test main; do
   echo "$b:"
   gh api "repos/${REPO}/branches/${b}/protection" --jq '{
     checks: (.required_status_checks.contexts | length),
@@ -102,5 +108,5 @@ for b in test main; do
   }'
 done
 echo
-echo "Default branch is still 'main'. Point new PRs at 'test':"
-echo "  gh repo edit ${REPO} --default-branch test    # optional but recommended"
+echo "Point new PRs at 'dev' by making it the default branch:"
+echo "  gh repo edit ${REPO} --default-branch dev"

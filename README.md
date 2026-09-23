@@ -6,51 +6,47 @@ once it has been proven out.
 
 ```
 feature/login  feature/payment  feature/dashboard
-        \            |            /
-         \           |           /
-          ──────── PR ──────────
-                    │
-        ┌───────────▼────────────────────────────┐
-        │           AUTOMATED GATE                │
-        │  title · description · linked-issue     │
-        │  not-wip · size            [4 checks]   │
-        │  verify: eslint · prettier · tsc ·      │
-        │          vitest+coverage · build        │
-        │  security: gitleaks · semgrep · audit   │
-        │  analyze: CodeQL                        │
-        │  ─────────────────────────────────────  │
-        │  AI code review            [advisory]   │
-        └───────────┬─────────────────────────────┘
-                    │
-              all green?
-              /                      NO            YES
-             │             │
-        dev fixes      1 dev approval
-             │             │
-             └──────►  Squash merge
-                           │
-                           ▼
-                      TEST BRANCH
-                           │
-                      QA / tester
-                           │
-                    ┌──────┴──────┐
-                  FAIL           PASS
-                    │              │
-               dev fixes    gh workflow run promote.yml
-                    │              │
-                    │              ▼
-                    │        PR: test → main
-                    │              │
-                    │      checks re-run on the
-                    │      combined branch
-                    │              │
-                    │      tester approves
-                    │              │
-                    │      human clicks
-                    │      "Create a merge commit"
-                    │              │
-                    └──────────────┼──────► MAIN
+        └──────────── PR ────────────┘
+                      │
+     ┌────────────────▼─────────────────────┐
+     │          AUTOMATED GATE               │
+     │  1 PR guidelines   title·description· │
+     │                    linked-issue·      │
+     │                    not-wip·size       │
+     │  2 ESLint      ┐                      │
+     │  3 Prettier    │                      │
+     │  4 TypeScript  ├── verify             │
+     │  5 Tests+cov   │                      │
+     │  6 Build       ┘                      │
+     │  7 Security    ├── security · analyze │
+     │  ───────────────────────────────────  │
+     │  8 AI review       [advisory]         │
+     └────────────────┬──────────────────────┘
+          NO ─────────┴───────── YES
+           │                      │
+      dev fixes         reviewer approves
+           ▲                      │
+           │              Squash and merge
+           │                      ▼
+           │                    DEV
+           │                      │
+           │   gh workflow run promote.yml -f hop=dev-to-test
+           │                      ▼
+           │            PR: dev → test   (checks re-run)
+           │            reviewer approves → merge commit
+           │                      ▼
+           │                    TEST
+           │                      │
+           │                QA / tester
+           │          FAIL ───────┴─────── PASS
+           └───────────┘                    │
+                                            │
+         gh workflow run promote.yml -f hop=test-to-main
+                                            ▼
+                            PR: test → main  (checks re-run)
+                            tester approves → merge commit
+                                            ▼
+                                          MAIN
 ```
 
 
@@ -72,11 +68,15 @@ gh repo create pr --private --source=. --remote=origin --push
 #    https://github.com/apps/gemini-code-assist  -> Install -> this repo only
 #    Behaviour is controlled by .gemini/config.yaml and .gemini/styleguide.md
 
-# 6. create + protect BOTH branches (creates 'test' from main if missing)
-./scripts/setup-branch-protection.sh balajikarthik2004/pr sandbox
+# 6. add your second account as a collaborator with write access
+gh api -X PUT repos/balajikarthik2004/pr/collaborators/SECOND_ACCOUNT -f permission=push
 
-# 7. optional: make 'test' the default so new PRs target it automatically
-gh repo edit balajikarthik2004/pr --default-branch test
+# 7. create + protect all three branches (creates dev/test from main if missing)
+#    'team' = 1 real approval per hop. Use 'solo' only if you have one account.
+./scripts/setup-branch-protection.sh balajikarthik2004/pr team
+
+# 8. make dev the default so new PRs target it automatically
+gh repo edit balajikarthik2004/pr --default-branch dev
 ```
 
 If the repo has GitHub Advanced Security (any public repo, or an org on

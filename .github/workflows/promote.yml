@@ -1,16 +1,28 @@
-name: Promote test to main
+name: Promote
 
-# Opens the release PR once QA has signed off on the test branch.
-# Run it from the Actions tab, or:  gh workflow run promote.yml
+# Opens a promotion PR for one hop of the chain:
+#   dev -> test    once the integrated changes are ready for QA
+#   test -> main   once QA has signed off
 #
-# It only opens the PR. It never merges - the tester approves and a
-# human clicks the merge button.
+# Run from the Actions tab, or:
+#   gh workflow run promote.yml -f hop=dev-to-test
+#   gh workflow run promote.yml -f hop=test-to-main
+#
+# It only opens the PR. It never merges - a reviewer approves and a human
+# clicks the merge button.
 
 on:
   workflow_dispatch:
     inputs:
+      hop:
+        description: 'Which promotion to open'
+        required: true
+        type: choice
+        options:
+          - dev-to-test
+          - test-to-main
       title:
-        description: 'Release title (optional)'
+        description: 'Title override (optional)'
         required: false
         default: ''
 
@@ -22,90 +34,123 @@ jobs:
   open-release-pr:
     name: open-release-pr
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Check there is anything to promote
-        id: diff
+      - name: Resolve the hop
+        id: hop
         run: |
           set -euo pipefail
-          git fetch --no-tags origin main test
-          AHEAD=$(git rev-list --count origin/main..origin/test)
+          case "${{ inputs.hop }}" in
+            dev-to-test)  HEAD_B=dev;  BASE_B=test ;;
+            test-to-main) HEAD_B=test; BASE_B=main ;;
+            *) echo "::error::unknown hop '${{ inputs.hop }}'"; exit 1 ;;
+          esac
+          echo "head=$HEAD_B" >> "$GITHUB_OUTPUT"
+          echo "base=$BASE_B" >> "$GITHUB_OUTPUT"
+          echo "Promoting $HEAD_B -> $BASE_B"
+
+      - name: Check there is anything to promote
+        id: diff
+        env:
+          HEAD_B: ${{ steps.hop.outputs.head }}
+          BASE_B: ${{ steps.hop.outputs.base }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "$BASE_B" "$HEAD_B"
+          AHEAD=$(git rev-list --count "origin/${BASE_B}..origin/${HEAD_B}")
           echo "ahead=$AHEAD" >> "$GITHUB_OUTPUT"
           if [ "$AHEAD" -eq 0 ]; then
-            echo "::notice::test is not ahead of main - nothing to promote."
+            echo "::notice::$HEAD_B is not ahead of $BASE_B - nothing to promote."
           else
-            echo "test is $AHEAD commit(s) ahead of main."
+            echo "$HEAD_B is $AHEAD commit(s) ahead of $BASE_B."
           fi
 
-      - name: Reuse the open release PR if there is one
+      - name: Reuse the open promotion PR if there is one
         if: steps.diff.outputs.ahead != '0'
         id: existing
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_B: ${{ steps.hop.outputs.head }}
+          BASE_B: ${{ steps.hop.outputs.base }}
         run: |
           set -euo pipefail
-          NUM=$(gh pr list --base main --head test --state open \
+          NUM=$(gh pr list --base "$BASE_B" --head "$HEAD_B" --state open \
                   --json number --jq '.[0].number // empty')
           echo "number=${NUM}" >> "$GITHUB_OUTPUT"
 
       - name: Build the release notes
         if: steps.diff.outputs.ahead != '0'
-        id: notes
+        env:
+          HEAD_B: ${{ steps.hop.outputs.head }}
+          BASE_B: ${{ steps.hop.outputs.base }}
+          AHEAD: ${{ steps.diff.outputs.ahead }}
         run: |
           set -euo pipefail
           {
             echo '## What'
             echo
-            echo "Promotes ${{ steps.diff.outputs.ahead }} change(s) from \`test\` to \`main\`."
+            echo "Promotes ${AHEAD} change(s) from \`${HEAD_B}\` to \`${BASE_B}\`."
             echo
             echo '### Changes'
             echo
-            git log --no-merges --pretty='- %s (%an)' origin/main..origin/test
+            git log --no-merges --pretty='- %s (%an)' "origin/${BASE_B}..origin/${HEAD_B}"
             echo
             echo '## Why'
-            echo
-            echo 'QA has signed off on these changes on the test branch.'
+            if [ "$BASE_B" = "test" ]; then
+              echo
+              echo 'These changes passed the full gate on entry to `dev` and are'
+              echo 'ready for QA to exercise on the test branch.'
+            else
+              echo
+              echo 'QA has signed off on these changes on the test branch.'
+            fi
             echo
             echo '## How tested'
             echo
-            echo 'Each change passed the full automated gate on entry to `test`.'
-            echo 'QA then exercised the combined result on the test branch.'
+            echo 'Each change passed the full automated gate on entry to `dev`.'
+            if [ "$BASE_B" = "main" ]; then
+              echo 'QA then exercised the combined result on `test`.'
+            fi
             echo 'CI re-runs here against the merged combination.'
             echo
             echo '## Risk / rollback'
             echo
-            echo 'Revert this merge commit to roll the whole release back at once.'
+            echo 'Revert this merge commit to roll the whole set back at once.'
             echo
             echo '---'
             echo
-            echo '### Tester checklist'
-            echo
-            echo '- [ ] Exercised the changed paths on the test branch'
-            echo '- [ ] Checked the AI review comments on the source PRs'
-            echo '- [ ] No open regressions attributable to this set'
-            echo
-            echo '> Merge with **Create a merge commit**, not squash. Squashing here'
-            echo '> makes `test` and `main` diverge and every later release PR'
-            echo '> will show phantom conflicts.'
+            if [ "$BASE_B" = "main" ]; then
+              echo '### Tester checklist'
+              echo
+              echo '- [ ] Exercised the changed paths on the test branch'
+              echo '- [ ] Checked the AI review comments on the source PRs'
+              echo '- [ ] No open regressions attributable to this set'
+              echo
+            fi
+            echo "> Merge with **Create a merge commit**, not squash. Squashing here"
+            echo "> makes \`${HEAD_B}\` and \`${BASE_B}\` diverge, and every later"
+            echo '> promotion PR will show phantom conflicts.'
           } > notes.md
           echo "Release notes:"; cat notes.md
 
-      - name: Open or update the release PR
+      - name: Open or update the promotion PR
         if: steps.diff.outputs.ahead != '0'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_B: ${{ steps.hop.outputs.head }}
+          BASE_B: ${{ steps.hop.outputs.base }}
           TITLE: ${{ inputs.title }}
+          EXISTING: ${{ steps.existing.outputs.number }}
         run: |
           set -euo pipefail
-          SUBJECT="${TITLE:-release: promote test to main ($(date -u +%Y-%m-%d))}"
-          if [ -n "${{ steps.existing.outputs.number }}" ]; then
-            gh pr edit "${{ steps.existing.outputs.number }}" \
-              --title "$SUBJECT" --body-file notes.md
-            echo "Updated PR #${{ steps.existing.outputs.number }}"
+          SUBJECT="${TITLE:-chore: promote ${HEAD_B} to ${BASE_B} ($(date -u +%Y-%m-%d))}"
+          if [ -n "$EXISTING" ]; then
+            gh pr edit "$EXISTING" --title "$SUBJECT" --body-file notes.md
+            echo "Updated PR #${EXISTING}"
           else
-            gh pr create --base main --head test \
+            gh pr create --base "$BASE_B" --head "$HEAD_B" \
               --title "$SUBJECT" --body-file notes.md
           fi
