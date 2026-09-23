@@ -31,8 +31,9 @@ npm run verify
 # 4. create the repo and push
 gh repo create pr --private --source=. --remote=origin --push
 
-# 5. add the API key the AI reviewer needs
-gh secret set ANTHROPIC_API_KEY --body "sk-ant-..."
+# 5. auth for the AI reviewer (uses your Claude subscription, not an API key)
+claude setup-token                    # prints sk-ant-oat01-...
+gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo balajikarthik2004/pr
 
 # 6. lock down main
 ./scripts/setup-branch-protection.sh balajikarthik2004/pr sandbox
