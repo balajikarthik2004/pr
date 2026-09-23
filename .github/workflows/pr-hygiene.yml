@@ -1,0 +1,142 @@
+name: PR Hygiene
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, labeled, unlabeled, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  title:
+    name: title
+    runs-on: ubuntu-latest
+    steps:
+      - name: Conventional Commits title
+        uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            perf
+            refactor
+            docs
+            test
+            build
+            ci
+            chore
+            revert
+          requireScope: false
+          subjectPattern: ^(?![A-Z])(?!.*\.$).{10,72}$
+          subjectPatternError: |
+            The subject "{subject}" is invalid. It must be 10-72 characters,
+            start lowercase, and not end with a period.
+
+  description:
+    name: description
+    runs-on: ubuntu-latest
+    steps:
+      - name: Template filled in
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+          if [ "${#BODY}" -lt 80 ]; then
+            echo "::error::PR description is ${#BODY} chars. Fill in the template (min 80)."
+            exit 1
+          fi
+          missing=0
+          for heading in "## What" "## Why" "## How tested" "## Risk / rollback"; do
+            if ! printf '%s' "$BODY" | grep -qF "$heading"; then
+              echo "::error::Description is missing the '$heading' section."
+              missing=1
+            fi
+          done
+          # Reject a template submitted with every section left empty.
+          stripped=$(printf '%s' "$BODY" | sed 's/<!--.*-->//g' | grep -v '^\s*$' | grep -v '^\s*##' | grep -v '^\s*-\s*\[' | wc -l)
+          if [ "$stripped" -lt 3 ]; then
+            echo "::error::Template headings are present but empty. Write actual content."
+            missing=1
+          fi
+          exit $missing
+
+  linked-issue:
+    name: linked-issue
+    runs-on: ubuntu-latest
+    steps:
+      - name: Issue or ticket reference required
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+          if printf '%s %s' "$TITLE" "$BODY" | grep -Eq '(#[0-9]+|[A-Z][A-Z0-9]+-[0-9]+)'; then
+            echo "Linked reference found."
+          else
+            echo "::error::Link an issue (#123) or ticket (ABC-456) in the title or description."
+            exit 1
+          fi
+
+  not-wip:
+    name: not-wip
+    runs-on: ubuntu-latest
+    steps:
+      - name: Block WIP and draft-intent markers
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          DRAFT: ${{ github.event.pull_request.draft }}
+        run: |
+          set -euo pipefail
+          if [ "$DRAFT" = "true" ]; then
+            echo "::error::Mark the PR ready for review before merging."
+            exit 1
+          fi
+          shopt -s nocasematch
+          if [[ "$TITLE" == *wip* || "$TITLE" == *"do not merge"* || "$TITLE" == *"don't merge"* ]]; then
+            echo "::error::Title contains a WIP / do-not-merge marker."
+            exit 1
+          fi
+          echo "OK"
+
+  size:
+    name: size
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Enforce reviewable PR size
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=0 origin "$BASE_SHA" "$HEAD_SHA" 2>/dev/null || true
+          CHANGED=$(git diff --numstat "$BASE_SHA" "$HEAD_SHA" -- . \
+            ':(exclude)**/package-lock.json' \
+            ':(exclude)**/*.lock' \
+            ':(exclude)**/*.snap' \
+            ':(exclude)**/generated/**' \
+            ':(exclude)**/*.svg' \
+            | awk '{a+=$1; d+=$2} END {print (a+d)+0}')
+          FILES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" | wc -l)
+          echo "Changed lines (excluding lockfiles/generated): $CHANGED across $FILES files"
+          echo "### PR size: $CHANGED lines, $FILES files" >> "$GITHUB_STEP_SUMMARY"
+
+          if printf '%s' "$LABELS" | grep -q 'large-pr'; then
+            echo "Label 'large-pr' present - size limit waived."
+            exit 0
+          fi
+          if [ "$CHANGED" -gt 800 ]; then
+            echo "::error::$CHANGED changed lines exceeds the 800-line limit. Split the PR, or add the 'large-pr' label with justification in the description."
+            exit 1
+          fi
+          if [ "$FILES" -gt 50 ]; then
+            echo "::error::$FILES changed files exceeds the 50-file limit. Split the PR, or add the 'large-pr' label."
+            exit 1
+          fi
