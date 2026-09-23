@@ -1,10 +1,9 @@
 # Every PR needs a review from an owner.
-# SANDBOX: replace REPLACE_ME with your GitHub username before pushing.
 # In the org repo, use teams instead: @your-org/engineers
-*                       @REPLACE_ME
+*                       @balajikarthik2004
 
 # Higher-risk paths get a dedicated owner in the org repo.
-/.github/               @REPLACE_ME
-/scripts/               @REPLACE_ME
-/src/lib/validate.ts    @REPLACE_ME
-package-lock.json       @REPLACE_ME
+/.github/               @balajikarthik2004
+/scripts/               @balajikarthik2004
+/src/lib/validate.ts    @balajikarthik2004
+package-lock.json       @balajikarthik2004

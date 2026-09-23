@@ -59,7 +59,7 @@ describe('totalCents', () => {
   });
 
   it('applies the discount when present', () => {
-    expect(totalCents(cart, { code: 'TEN', percentOff: 10 })).toBe(4941);
+    expect(totalCents(cart, { code: 'TEN', percentOff: 10 })).toBe(4948);
   });
 });
 

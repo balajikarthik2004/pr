@@ -56,7 +56,9 @@ jobs:
             fi
           done
           # Reject a template submitted with every section left empty.
-          stripped=$(printf '%s' "$BODY" | sed 's/<!--.*-->//g' | grep -v '^\s*$' | grep -v '^\s*##' | grep -v '^\s*-\s*\[' | wc -l)
+          # `|| true` matters: a grep -v that matches nothing exits 1, and with
+          # pipefail+set -e that would abort the step instead of reporting the error.
+          stripped=$(printf '%s' "$BODY" | sed 's/<!--.*-->//g' \n            | { grep -v '^[[:space:]]*$' || true; } \n            | { grep -v '^[[:space:]]*##' || true; } \n            | { grep -v '^[[:space:]]*-[[:space:]]*\[' || true; } \n            | wc -l)
           if [ "$stripped" -lt 3 ]; then
             echo "::error::Template headings are present but empty. Write actual content."
             missing=1
@@ -116,7 +118,6 @@ jobs:
           LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
         run: |
           set -euo pipefail
-          git fetch --no-tags --depth=0 origin "$BASE_SHA" "$HEAD_SHA" 2>/dev/null || true
           CHANGED=$(git diff --numstat "$BASE_SHA" "$HEAD_SHA" -- . \
             ':(exclude)**/package-lock.json' \
             ':(exclude)**/*.lock' \
