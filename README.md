@@ -10,7 +10,7 @@ PR opened
   ├─ security      gitleaks · semgrep · npm audit · dep review   [blocking]
   ├─ analyze       CodeQL (GHAS only)                            [blocking]
   ├─ title / description / linked-issue / not-wip / size         [blocking]
-  └─ ai-review     Claude posts inline comments                  [advisory]
+  └─ Gemini Code Assist reviews the diff (GitHub App)            [advisory]
         ↓
   human approves (stale approvals dismissed on new pushes)
         ↓
@@ -31,9 +31,9 @@ npm run verify
 # 4. create the repo and push
 gh repo create pr --private --source=. --remote=origin --push
 
-# 5. auth for the AI reviewer (uses your Claude subscription, not an API key)
-claude setup-token                    # prints sk-ant-oat01-...
-gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo balajikarthik2004/pr
+# 5. install the AI reviewer - a GitHub App, no secret and no workflow needed
+#    https://github.com/apps/gemini-code-assist  -> Install -> this repo only
+#    Behaviour is controlled by .gemini/config.yaml and .gemini/styleguide.md
 
 # 6. lock down main
 ./scripts/setup-branch-protection.sh balajikarthik2004/pr sandbox
@@ -53,11 +53,11 @@ result before moving on.
 
 | Command | Expected |
 |---|---|
-| `./scripts/seed-test-pr.sh clean` | Everything green. AI posts one "no issues" comment. Merge button enabled. |
+| `./scripts/seed-test-pr.sh clean` | Everything green. Gemini posts a summary and no findings. Merge button enabled. |
 | `./scripts/seed-test-pr.sh lint` | `verify` fails at the lint step. Merge blocked. |
 | `./scripts/seed-test-pr.sh hygiene` | `title`, `description`, `linked-issue`, `not-wip` all fail. |
 | `./scripts/seed-test-pr.sh huge` | `size` fails at ~950 lines. Add the `large-pr` label, re-run, it passes. |
-| `./scripts/seed-test-pr.sh bugs` | `verify` and `security` pass or mostly pass — **but the AI should flag** the index-mutation bug in `pruneExpired`, the unsalted MD5, the timing-unsafe token compare, and the N+1 in `loadNames`. This is the real test. |
+| `./scripts/seed-test-pr.sh bugs` | `verify` and `security` pass or mostly pass — **but the reviewer should flag** the index-mutation bug in `pruneExpired`, the unsalted MD5, the timing-unsafe token compare, and the N+1 in `loadNames`. This is the real test. |
 
 Watch a run: `gh pr checks --watch`
 
@@ -72,9 +72,10 @@ Four defects are planted. Score the reviewer honestly:
    one most likely to be missed.
 4. `loadNames` — sequential `await fetch` in a loop. **Performance.**
 
-Count hits, misses, and false positives. If it invents problems, tighten the
-confidence threshold in the prompt. If it misses (1), that's the signal the prompt
-needs a concrete example of the class.
+Count hits, misses, and false positives. All four classes are named explicitly in
+`.gemini/styleguide.md`, so a miss means the style guide needs a sharper example of
+that class — edit it and comment `/gemini review` to re-run. Too much noise instead?
+Raise `comment_severity_threshold` to `HIGH` in `.gemini/config.yaml`.
 
 Clean up when done: `git push origin --delete <branch>` and close the PRs.
 
@@ -82,7 +83,8 @@ Clean up when done: `git push origin --delete <branch>` and close the PRs.
 
 1. Copy `.github/` and `CONTRIBUTING.md` into the target repo.
 2. Rewrite `CODEOWNERS` to use teams (`@org/platform`), not usernames.
-3. Set `ANTHROPIC_API_KEY` as an **org-level** secret scoped to the repos that need it.
+3. Install the Gemini Code Assist app on the org and grant it the target repos.
+   Copy `.gemini/` across; the style guide is the part worth tuning per repo.
 4. `./scripts/setup-branch-protection.sh org/repo prod` — 1 approval, CODEOWNERS
    review required, admin enforcement on.
 5. Roll out in stages. Turning all of this on at once on a busy repo gets it
