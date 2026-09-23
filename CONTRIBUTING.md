@@ -4,9 +4,18 @@ These rules are enforced by CI. Nothing here relies on someone remembering it.
 
 ## Branching
 
-- Branch off `main`. Name it `feat/…`, `fix/…`, `chore/…`, or `test/…`.
-- Never push to `main`. It is protected.
-- Rebase onto `main` before requesting review; merges must be fast-forwardable.
+Two long-lived branches:
+
+| Branch | What it is | How code gets in |
+|---|---|---|
+| `test` | Integration branch. QA works here. | PR from a feature branch, full gate, **squash merge** |
+| `main` | Production. | PR from `test` only, tester approval, **merge commit** |
+
+- Branch off `test`, not `main`. Name it `feat/…`, `fix/…`, `chore/…`.
+- Never push directly to either branch. Both are protected.
+- Rebase onto `test` before requesting review.
+- **Never squash-merge `test` into `main`.** Use "Create a merge commit". Squashing
+  makes the two branches diverge and every later release PR shows phantom conflicts.
 
 ## Pull request rules
 
@@ -17,7 +26,7 @@ These rules are enforced by CI. Nothing here relies on someone remembering it.
 | Linked work | `#123` or `ABC-456` in title or body | `linked-issue` |
 | Not a draft, no WIP marker | — | `not-wip` |
 | Size | ≤800 changed lines, ≤50 files (lockfiles and generated excluded) | `size` |
-| Lint / types / tests / build | all pass | `verify` |
+| Lint / format / types / tests / build | all pass | `verify` |
 | Coverage | lines ≥80%, branches ≥70% | `verify` |
 | Secrets, SAST, vulnerable deps | no high-severity findings | `security` |
 
@@ -42,15 +51,33 @@ file is the review policy, and it is worth editing when the reviewer is wrong.
 
 ## Review and merge
 
-1. Open the PR. CI and the AI reviewer start automatically.
-2. Fix what CI finds. Answer what the AI finds.
-3. A human reviewer approves. Pushing new commits dismisses stale approvals.
-4. You click **Squash and merge**. There is no auto-merge — the last step is a
-   person deciding to ship.
+### Stage 1 — your change into `test`
+
+1. Open a PR from your feature branch into `test`. All eight checks and the AI
+   reviewer start automatically.
+2. Fix what CI finds. Answer what the AI finds — unresolved threads block merge.
+3. A developer approves. Pushing new commits dismisses stale approvals.
+4. Click **Squash and merge**.
+
+### Stage 2 — `test` into `main`
+
+5. QA exercises the change on the `test` branch. If it fails, back to step 1.
+6. On sign-off, someone runs `gh workflow run promote.yml`. That opens the
+   release PR with generated notes — it does not merge anything.
+7. All checks re-run against the combined branch. Being individually green is
+   not the same as being green together.
+8. The **tester** approves.
+9. A human clicks **Create a merge commit**. Auto-merge is disabled repo-wide,
+   so nothing reaches `main` without that click.
+
+The size and linked-issue gates are waived on the release PR — it aggregates
+many already-reviewed changes and references many tickets. Everything else
+still applies.
 
 ## Running the checks locally
 
 ```bash
 npm ci
-npm run verify   # lint + typecheck + coverage + build, same as CI
+npm run verify   # lint + format + typecheck + coverage + build, same as CI
+npm run format   # fix formatting in place
 ```

@@ -1,6 +1,8 @@
 import js from '@eslint/js';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
+// Must be last: turns off every ESLint rule that fights Prettier.
+import prettier from 'eslint-config-prettier';
 
 export default tseslint.config(
   { ignores: ['dist/**', 'coverage/**', 'node_modules/**'] },
@@ -22,4 +24,5 @@ export default tseslint.config(
       '@typescript-eslint/consistent-type-imports': 'error',
     },
   },
+  prettier,
 );

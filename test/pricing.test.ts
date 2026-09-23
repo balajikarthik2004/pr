@@ -22,15 +22,15 @@ describe('subtotalCents', () => {
   });
 
   it('rejects a fractional price', () => {
-    expect(() => subtotalCents([{ sku: 'A1B2C3', unitPriceCents: 1.5, quantity: 1 }])).toThrow(
-      RangeError,
-    );
+    expect(() =>
+      subtotalCents([{ sku: 'A1B2C3', unitPriceCents: 1.5, quantity: 1 }]),
+    ).toThrow(RangeError);
   });
 
   it('rejects a negative quantity', () => {
-    expect(() => subtotalCents([{ sku: 'A1B2C3', unitPriceCents: 100, quantity: -1 }])).toThrow(
-      RangeError,
-    );
+    expect(() =>
+      subtotalCents([{ sku: 'A1B2C3', unitPriceCents: 100, quantity: -1 }]),
+    ).toThrow(RangeError);
   });
 });
 
@@ -48,7 +48,9 @@ describe('applyDiscount', () => {
   });
 
   it('rejects an out-of-range percentage', () => {
-    expect(() => applyDiscount(100, { code: 'BAD', percentOff: 101 })).toThrow(RangeError);
+    expect(() => applyDiscount(100, { code: 'BAD', percentOff: 101 })).toThrow(
+      RangeError,
+    );
     expect(() => applyDiscount(100, { code: 'BAD', percentOff: -1 })).toThrow(RangeError);
   });
 });

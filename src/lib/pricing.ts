@@ -37,10 +37,7 @@ export function applyDiscount(amountCents: number, discount: Discount): number {
   return amountCents - off;
 }
 
-export function totalCents(
-  items: readonly LineItem[],
-  discount?: Discount,
-): number {
+export function totalCents(items: readonly LineItem[], discount?: Discount): number {
   const subtotal = subtotalCents(items);
   return discount ? applyDiscount(subtotal, discount) : subtotal;
 }

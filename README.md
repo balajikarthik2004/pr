@@ -5,17 +5,54 @@ approval → manual merge. Everything here is meant to be lifted into a real rep
 once it has been proven out.
 
 ```
-PR opened
-  ├─ verify        lint · typecheck · test+coverage · build      [blocking]
-  ├─ security      gitleaks · semgrep · npm audit · dep review   [blocking]
-  ├─ analyze       CodeQL (GHAS only)                            [blocking]
-  ├─ title / description / linked-issue / not-wip / size         [blocking]
-  └─ Gemini Code Assist reviews the diff (GitHub App)            [advisory]
-        ↓
-  human approves (stale approvals dismissed on new pushes)
-        ↓
-  Squash and merge — clicked by a person, auto-merge disabled
+feature/login  feature/payment  feature/dashboard
+        \            |            /
+         \           |           /
+          ──────── PR ──────────
+                    │
+        ┌───────────▼────────────────────────────┐
+        │           AUTOMATED GATE                │
+        │  title · description · linked-issue     │
+        │  not-wip · size            [4 checks]   │
+        │  verify: eslint · prettier · tsc ·      │
+        │          vitest+coverage · build        │
+        │  security: gitleaks · semgrep · audit   │
+        │  analyze: CodeQL                        │
+        │  ─────────────────────────────────────  │
+        │  AI code review            [advisory]   │
+        └───────────┬─────────────────────────────┘
+                    │
+              all green?
+              /                      NO            YES
+             │             │
+        dev fixes      1 dev approval
+             │             │
+             └──────►  Squash merge
+                           │
+                           ▼
+                      TEST BRANCH
+                           │
+                      QA / tester
+                           │
+                    ┌──────┴──────┐
+                  FAIL           PASS
+                    │              │
+               dev fixes    gh workflow run promote.yml
+                    │              │
+                    │              ▼
+                    │        PR: test → main
+                    │              │
+                    │      checks re-run on the
+                    │      combined branch
+                    │              │
+                    │      tester approves
+                    │              │
+                    │      human clicks
+                    │      "Create a merge commit"
+                    │              │
+                    └──────────────┼──────► MAIN
 ```
+
 
 ## Setup
 
@@ -35,8 +72,11 @@ gh repo create pr --private --source=. --remote=origin --push
 #    https://github.com/apps/gemini-code-assist  -> Install -> this repo only
 #    Behaviour is controlled by .gemini/config.yaml and .gemini/styleguide.md
 
-# 6. lock down main
+# 6. create + protect BOTH branches (creates 'test' from main if missing)
 ./scripts/setup-branch-protection.sh balajikarthik2004/pr sandbox
+
+# 7. optional: make 'test' the default so new PRs target it automatically
+gh repo edit balajikarthik2004/pr --default-branch test
 ```
 
 If the repo has GitHub Advanced Security (any public repo, or an org on
@@ -81,12 +121,14 @@ Clean up when done: `git push origin --delete <branch>` and close the PRs.
 
 ## Moving to the org
 
-1. Copy `.github/` and `CONTRIBUTING.md` into the target repo.
+1. Copy `.github/`, `.gemini/` and `CONTRIBUTING.md` into the target repo.
 2. Rewrite `CODEOWNERS` to use teams (`@org/platform`), not usernames.
 3. Install the Gemini Code Assist app on the org and grant it the target repos.
    Copy `.gemini/` across; the style guide is the part worth tuning per repo.
-4. `./scripts/setup-branch-protection.sh org/repo prod` — 1 approval, CODEOWNERS
-   review required, admin enforcement on.
+4. `./scripts/setup-branch-protection.sh org/repo prod` — `test` needs 1 dev
+   approval, `main` needs 1 tester approval with CODEOWNERS review, admin
+   enforcement on both. Put your QA team in CODEOWNERS so the tester approval
+   on `main` is routed automatically.
 5. Roll out in stages. Turning all of this on at once on a busy repo gets it
    switched off within a fortnight. Order: protection + 1 approval → `verify` →
    hygiene (title only, then the rest) → AI review advisory → security blocking.

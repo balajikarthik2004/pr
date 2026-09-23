@@ -8,6 +8,12 @@ permissions:
   contents: read
   pull-requests: read
 
+# A release PR (test -> main) is an aggregate of already-reviewed changes.
+# It is large by nature and references many tickets, so the size and
+# linked-issue gates are exempted for it. Everything else still applies.
+env:
+  IS_RELEASE_PR: ${{ github.base_ref == 'main' && github.head_ref == 'test' }}
+
 jobs:
   title:
     name: title
@@ -75,6 +81,10 @@ jobs:
           TITLE: ${{ github.event.pull_request.title }}
         run: |
           set -euo pipefail
+          if [ "$IS_RELEASE_PR" = "true" ]; then
+            echo "Release PR (test -> main): aggregates many tickets, gate skipped."
+            exit 0
+          fi
           if printf '%s %s' "$TITLE" "$BODY" | grep -Eq '(#[0-9]+|[A-Z][A-Z0-9]+-[0-9]+)'; then
             echo "Linked reference found."
           else
@@ -118,6 +128,10 @@ jobs:
           LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
         run: |
           set -euo pipefail
+          if [ "$IS_RELEASE_PR" = "true" ]; then
+            echo "Release PR (test -> main): large by design, size limit skipped."
+            exit 0
+          fi
           CHANGED=$(git diff --numstat "$BASE_SHA" "$HEAD_SHA" -- . \
             ':(exclude)**/package-lock.json' \
             ':(exclude)**/*.lock' \

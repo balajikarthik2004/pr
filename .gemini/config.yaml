@@ -15,10 +15,10 @@ code_review:
   max_review_comments: 10
 
   pull_request_opened:
-    help: false        # no command cheatsheet on every PR
-    summary: true      # one summary comment - the verdict a human reads first
+    help: false # no command cheatsheet on every PR
+    summary: true # one summary comment - the verdict a human reads first
     code_review: true
-    include_drafts: false   # drafts are work in progress; don't review them
+    include_drafts: false # drafts are work in progress; don't review them
 
 ignore_patterns:
   - 'package-lock.json'

@@ -1,0 +1,111 @@
+name: Promote test to main
+
+# Opens the release PR once QA has signed off on the test branch.
+# Run it from the Actions tab, or:  gh workflow run promote.yml
+#
+# It only opens the PR. It never merges - the tester approves and a
+# human clicks the merge button.
+
+on:
+  workflow_dispatch:
+    inputs:
+      title:
+        description: 'Release title (optional)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  open-release-pr:
+    name: open-release-pr
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check there is anything to promote
+        id: diff
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main test
+          AHEAD=$(git rev-list --count origin/main..origin/test)
+          echo "ahead=$AHEAD" >> "$GITHUB_OUTPUT"
+          if [ "$AHEAD" -eq 0 ]; then
+            echo "::notice::test is not ahead of main - nothing to promote."
+          else
+            echo "test is $AHEAD commit(s) ahead of main."
+          fi
+
+      - name: Reuse the open release PR if there is one
+        if: steps.diff.outputs.ahead != '0'
+        id: existing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          NUM=$(gh pr list --base main --head test --state open \
+                  --json number --jq '.[0].number // empty')
+          echo "number=${NUM}" >> "$GITHUB_OUTPUT"
+
+      - name: Build the release notes
+        if: steps.diff.outputs.ahead != '0'
+        id: notes
+        run: |
+          set -euo pipefail
+          {
+            echo '## What'
+            echo
+            echo "Promotes ${{ steps.diff.outputs.ahead }} change(s) from \`test\` to \`main\`."
+            echo
+            echo '### Changes'
+            echo
+            git log --no-merges --pretty='- %s (%an)' origin/main..origin/test
+            echo
+            echo '## Why'
+            echo
+            echo 'QA has signed off on these changes on the test branch.'
+            echo
+            echo '## How tested'
+            echo
+            echo 'Each change passed the full automated gate on entry to `test`.'
+            echo 'QA then exercised the combined result on the test branch.'
+            echo 'CI re-runs here against the merged combination.'
+            echo
+            echo '## Risk / rollback'
+            echo
+            echo 'Revert this merge commit to roll the whole release back at once.'
+            echo
+            echo '---'
+            echo
+            echo '### Tester checklist'
+            echo
+            echo '- [ ] Exercised the changed paths on the test branch'
+            echo '- [ ] Checked the AI review comments on the source PRs'
+            echo '- [ ] No open regressions attributable to this set'
+            echo
+            echo '> Merge with **Create a merge commit**, not squash. Squashing here'
+            echo '> makes `test` and `main` diverge and every later release PR'
+            echo '> will show phantom conflicts.'
+          } > notes.md
+          echo "Release notes:"; cat notes.md
+
+      - name: Open or update the release PR
+        if: steps.diff.outputs.ahead != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TITLE: ${{ inputs.title }}
+        run: |
+          set -euo pipefail
+          SUBJECT="${TITLE:-release: promote test to main ($(date -u +%Y-%m-%d))}"
+          if [ -n "${{ steps.existing.outputs.number }}" ]; then
+            gh pr edit "${{ steps.existing.outputs.number }}" \
+              --title "$SUBJECT" --body-file notes.md
+            echo "Updated PR #${{ steps.existing.outputs.number }}"
+          else
+            gh pr create --base main --head test \
+              --title "$SUBJECT" --body-file notes.md
+          fi
