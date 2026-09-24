@@ -9,7 +9,7 @@ export class ValidationError extends Error {
 }
 
 /** Parse a user-supplied integer, rejecting anything non-finite or out of range. */
-export function parseBoundedInt(
+export function parseBoundedIntTest(
   raw: unknown,
   field: string,
   min: number,
