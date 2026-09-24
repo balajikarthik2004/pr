@@ -64,9 +64,13 @@ npm run verify
 # 4. create the repo and push
 gh repo create pr --private --source=. --remote=origin --push
 
-# 5. install the AI reviewer - a GitHub App, no secret and no workflow needed
-#    https://github.com/apps/gemini-code-assist  -> Install -> this repo only
-#    Behaviour is controlled by .gemini/config.yaml and .gemini/styleguide.md
+# 5. connect the AI reviewer (Claude, via your Pro/Max/Team subscription - no API key)
+#    a. install the Claude GitHub app: https://github.com/apps/claude -> this repo only
+#    b. generate a token tied to your subscription, then store it as a secret
+claude setup-token
+gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo balajikarthik2004/pr
+#    Behaviour: .github/workflows/ai-review.yml (model, limits)
+#               .github/review-guide.md          (what it looks for)
 
 # 6. add your second account as a collaborator with write access
 gh api -X PUT repos/balajikarthik2004/pr/collaborators/SECOND_ACCOUNT -f permission=push
@@ -93,7 +97,7 @@ result before moving on.
 
 | Command | Expected |
 |---|---|
-| `./scripts/seed-test-pr.sh clean` | Everything green. Gemini posts a summary and no findings. Merge button enabled. |
+| `./scripts/seed-test-pr.sh clean` | Everything green. Claude posts a one-line summary and no findings. Merge button enabled. |
 | `./scripts/seed-test-pr.sh lint` | `verify` fails at the lint step. Merge blocked. |
 | `./scripts/seed-test-pr.sh hygiene` | `title`, `description`, `linked-issue`, `not-wip` all fail. |
 | `./scripts/seed-test-pr.sh huge` | `size` fails at ~950 lines. Add the `large-pr` label, re-run, it passes. |
@@ -113,18 +117,20 @@ Four defects are planted. Score the reviewer honestly:
 4. `loadNames` — sequential `await fetch` in a loop. **Performance.**
 
 Count hits, misses, and false positives. All four classes are named explicitly in
-`.gemini/styleguide.md`, so a miss means the style guide needs a sharper example of
-that class — edit it and comment `/gemini review` to re-run. Too much noise instead?
-Raise `comment_severity_threshold` to `HIGH` in `.gemini/config.yaml`.
+`.github/review-guide.md`, so a miss means the guide needs a sharper example of
+that class — edit it and re-run the `AI Code Review` job. Still missing things?
+Switch `--model` to `claude-opus-5-5` in `ai-review.yml` for that run. Too much noise
+instead? Tighten the confidence rule in the workflow prompt.
 
 Clean up when done: `git push origin --delete <branch>` and close the PRs.
 
 ## Moving to the org
 
-1. Copy `.github/`, `.gemini/` and `CONTRIBUTING.md` into the target repo.
+1. Copy `.github/` and `CONTRIBUTING.md` into the target repo.
 2. Rewrite `CODEOWNERS` to use teams (`@org/platform`), not usernames.
-3. Install the Gemini Code Assist app on the org and grant it the target repos.
-   Copy `.gemini/` across; the style guide is the part worth tuning per repo.
+3. Install the Claude GitHub app on the org and set `CLAUDE_CODE_OAUTH_TOKEN` (or
+   `ANTHROPIC_API_KEY`) as an org secret, from an org-owned account rather than
+   one person's plan. `.github/review-guide.md` is the part worth tuning per repo.
 4. `./scripts/setup-branch-protection.sh org/repo prod` — `test` needs 1 dev
    approval, `main` needs 1 tester approval with CODEOWNERS review, admin
    enforcement on both. Put your QA team in CODEOWNERS so the tester approval

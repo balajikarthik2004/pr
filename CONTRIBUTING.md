@@ -37,16 +37,21 @@ in the description. The label waives the check and leaves an audit trail.
 
 ## The AI reviewer
 
-Every non-draft PR gets an automated review from Gemini Code Assist. It posts a
-summary comment plus up to 10 inline comments, and only for findings at MEDIUM
-severity or above. What it looks for is defined in `.gemini/styleguide.md` — that
-file is the review policy, and it is worth editing when the reviewer is wrong.
+Every non-draft PR into `dev` gets an automated review from Claude (Sonnet), run by
+`.github/workflows/ai-review.yml`. It posts one summary comment plus up to 10 inline
+comments, each tagged `[blocking]`, `[should-fix]` or `[nit]`. What it looks for is
+defined in `.github/review-guide.md` — that file is the review policy, and it is
+worth editing when the reviewer is wrong.
+
+Promotion PRs (`dev → test`, `test → main`) and docs-only PRs are not reviewed:
+every change in a promotion was already reviewed on its way into `dev`.
 
 **It does not gate the merge.** It is a reviewer, not a judge. But:
 
 - Every one of its comments must be resolved or replied to — "Require conversation
   resolution" is on, so unanswered threads block the merge button.
-- Ask for another pass by commenting `/gemini review` on the PR.
+- Every push re-runs the review. To re-run without pushing, open the PR's
+  **Checks** tab → `AI Code Review` → **Re-run jobs**.
 - Disagreeing is fine and expected. Reply saying why, then resolve.
 - A human still reviews the code. The AI catches a class of thing humans skim past;
   it does not catch intent, architecture, or whether the change should exist.
