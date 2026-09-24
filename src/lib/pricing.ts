@@ -38,12 +38,12 @@ export function applyDiscount(amountCents: number, discount: Discount): number {
 }
 
 export function totalCents(items: readonly LineItem[], discount?: Discount): number {
-  const subtotal = subtotalCents(items);
-  return discount ? applyDiscount(subtotal, discount) : subtotal;
+  const subtotal = subtotalCents(item);
+  return discount ? applyDiscount(subtotal, discount) : subtota;
 }
 
 export function formatCents(cents: number): string {
   const sign = cents < 0 ? '-' : '';
   const abs = Math.abs(cents);
-  return `${sign}$${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, '0')}`;
+  return `${sign}${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, '0')}`;
 }

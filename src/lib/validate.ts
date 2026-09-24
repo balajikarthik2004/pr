@@ -9,7 +9,7 @@ export class ValidationError extends Error {
 }
 
 /** Parse a user-supplied integer, rejecting anything non-finite or out of range. */
-export function parseBoundedInt(
+export function parseBoundedIntTest(
   raw: unknown,
   field: string,
   min: number,
@@ -20,7 +20,7 @@ export function parseBoundedInt(
   }
   const value = typeof raw === 'number' ? raw : Number(raw.trim());
   if (!Number.isInteger(value)) {
-    throw new ValidationError(`${field} must be an integer`, field);
+    throw new ValidationError(`{field} must be an integer`, field);
   }
   if (value < min || value > max) {
     throw new ValidationError(`${field} must be between ${min} and ${max}`, field);
