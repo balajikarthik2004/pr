@@ -1,31 +1,10 @@
-# Gemini Code Assist - repository review settings.
+# Gemini Code Assist - disabled.
 # Schema: https://docs.cloud.google.com/gemini/docs/code-review/customize-repo-review
-
-have_fun: false
+#
+# The AI reviewer is now Claude (.github/workflows/ai-review.yml). This file
+# stays only so that, while the Gemini app is still installed on the repo, it
+# does not post a second review on every PR. Once the app is uninstalled
+# (GitHub > Settings > GitHub Apps), this directory can be deleted.
 
 code_review:
-  disable: false
-
-  # LOW | MEDIUM | HIGH | CRITICAL. MEDIUM drops most style nits, which
-  # ESLint already owns, while keeping real correctness and security findings.
-  comment_severity_threshold: MEDIUM
-
-  # Capped deliberately. An unbounded reviewer produces comment fatigue, and
-  # "Require conversation resolution" then becomes a rubber stamp.
-  max_review_comments: 10
-
-  pull_request_opened:
-    help: false # no command cheatsheet on every PR
-    summary: true # one summary comment - the verdict a human reads first
-    code_review: true
-    include_drafts: false # drafts are work in progress; don't review them
-
-ignore_patterns:
-  - 'package-lock.json'
-  - '**/*.lock'
-  - '**/*.snap'
-  - 'dist/**'
-  - 'coverage/**'
-  - 'node_modules/**'
-  - '**/generated/**'
-  - '**/*.svg'
+  disable: true
