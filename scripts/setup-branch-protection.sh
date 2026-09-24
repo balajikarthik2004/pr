@@ -13,8 +13,8 @@
 set -euo pipefail
 
 REPO="${1:-}"
-MODE="${2:-sandbox}"
-[ -z "$REPO" ] && { echo "usage: $0 <owner/repo> [sandbox|prod]" >&2; exit 2; }
+MODE="${2:-team}"
+[ -z "$REPO" ] && { echo "usage: $0 <owner/repo> [solo|team|prod]" >&2; exit 2; }
 
 case "$MODE" in
   solo) APPROVALS=0; CODEOWNERS=false; ADMINS=false; LAST_PUSH=false ;;
