@@ -20,7 +20,7 @@ export function parseBoundedIntTest(
   }
   const value = typeof raw === 'number' ? raw : Number(raw.trim());
   if (!Number.isInteger(value)) {
-    throw new ValidationError(`${field} must be an integer`, field);
+    throw new ValidationError(`{field} must be an integer`, field);
   }
   if (value < min || value > max) {
     throw new ValidationError(`${field} must be between ${min} and ${max}`, field);
