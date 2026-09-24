@@ -15,7 +15,9 @@ S="${1:-}"
 
 git checkout dev -q 2>/dev/null || git checkout -qb dev
 git pull -q --ff-only origin dev 2>/dev/null || true
-BR="test/${S}-$(date +%s)"
+# Not "test/...": a branch named "test" exists, and git cannot create
+# refs under a name that is already a branch.
+BR="seed/${S}-$(date +%s)"
 git checkout -qb "$BR"
 
 case "$S" in
